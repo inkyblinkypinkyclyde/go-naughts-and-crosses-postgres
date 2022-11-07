@@ -8,6 +8,7 @@ CREATE TABLE grid (
 );
 
 CREATE TABLE turns (
+    id SERIAL PRIMARY KEY,
     value INT
 );
 
