@@ -3,12 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 
 	_ "github.com/lib/pq"
 )
 
-func printGrid(db *sql.DB) {
-	// var res string
+func getGrid(db *sql.DB) []string {
 	var grid []string
 	rows, err := db.Query("SELECT * FROM grid ORDER BY id ASC")
 	defer rows.Close()
@@ -20,6 +20,46 @@ func printGrid(db *sql.DB) {
 		var value string
 		rows.Scan(&id, &value)
 		grid = append(grid, value)
+	}
+	fmt.Println(reflect.TypeOf(grid))
+	return grid
+}
+
+func winCheck(grid []string, ox string) bool {
+	if grid[0] == ox && grid[1] == ox && grid[2] == ox {
+		return true
+	}
+	if grid[3] == ox && grid[4] == ox && grid[5] == ox {
+		return true
+	}
+	if grid[6] == ox && grid[7] == ox && grid[8] == ox {
+		return true
+	}
+	if grid[0] == ox && grid[3] == ox && grid[6] == ox {
+		return true
+	}
+	if grid[1] == ox && grid[4] == ox && grid[7] == ox {
+		return true
+	}
+	if grid[2] == ox && grid[5] == ox && grid[8] == ox {
+		return true
+	}
+	if grid[0] == ox && grid[4] == ox && grid[8] == ox {
+		return true
+	}
+	if grid[2] == ox && grid[4] == ox && grid[6] == ox {
+		return true
+	}
+	return false
+}
+
+func printGrid(db *sql.DB) {
+	grid := getGrid(db)
+	if winCheck(grid, "O") {
+		fmt.Println("O wins")
+	}
+	if winCheck(grid, "X") {
+		fmt.Println("X wins")
 	}
 	fmt.Printf(" %v | %v | %v \n %v | %v | %v \n %v | %v | %v \n", grid[0], grid[1], grid[2], grid[3], grid[4], grid[5], grid[6], grid[7], grid[8])
 
