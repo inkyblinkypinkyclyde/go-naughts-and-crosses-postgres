@@ -3,12 +3,19 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"reflect"
+
+	// "reflect"
 
 	_ "github.com/lib/pq"
 )
 
-func getGrid(db *sql.DB) []string {
+// Game vars
+type game struct {
+	game   bool
+	player string
+}
+
+func getGrid(db *sql.DB) []string { // Get the grid from the database return grid
 	var grid []string
 	rows, err := db.Query("SELECT * FROM grid ORDER BY id ASC")
 	defer rows.Close()
@@ -21,7 +28,7 @@ func getGrid(db *sql.DB) []string {
 		rows.Scan(&id, &value)
 		grid = append(grid, value)
 	}
-	fmt.Println(reflect.TypeOf(grid))
+
 	return grid
 }
 
@@ -53,51 +60,121 @@ func winCheck(grid []string, ox string) bool {
 	return false
 }
 
-func printGrid(db *sql.DB) {
-	grid := getGrid(db)
-	if winCheck(grid, "O") {
-		fmt.Println("O wins")
-	}
-	if winCheck(grid, "X") {
-		fmt.Println("X wins")
-	}
+func taketurn(g game, db *sql.DB) {
+	var input int
+	printGrid(getGrid(db))
+	fmt.Println("It's your turn!")
+	fmt.Printf("Enter a number for player %v :", g.player)
+	fmt.Scanln(&input)
+	updateGrid(db, input, g.player)
+	updateTurn(db, g)
+	printGrid(getGrid(db))
+}
+
+func printGrid(grid []string) {
 	fmt.Printf(" %v | %v | %v \n %v | %v | %v \n %v | %v | %v \n", grid[0], grid[1], grid[2], grid[3], grid[4], grid[5], grid[6], grid[7], grid[8])
 
 }
-
-func update(db *sql.DB, position int, ox string) {
+func updateGrid(db *sql.DB, position int, ox string) {
 	_, err := db.Exec("UPDATE grid SET value = $1 WHERE value = $2", ox, position)
 	if err != nil {
 		fmt.Println(err)
 	}
-
 }
 
-func setup(db *sql.DB) { // Setup the database
-	for i := 1; i < 10; i++ {
-		_, err := db.Exec("INSERT INTO grid (value) VALUES ($1)", i)
+func updateTurn(db *sql.DB, g game) {
+	fmt.Println("Updating turn")
+	if g.player == "x" {
+		_, err := db.Exec("UPDATE turns SET value = 'o' WHERE id = 1")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Turn updated to o")
+	}
+	if g.player == "o" {
+		_, err := db.Exec("UPDATE turns SET value = 'x' WHERE id = 1")
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Turn updated to x")
+	}
+	fmt.Println("Turn updated")
+}
+
+func turnCheck(db *sql.DB) string {
+	var turn string
+	rows, err := db.Query("SELECT * FROM turns")
+	defer rows.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
+	for rows.Next() {
+		var id int
+		var value string
+		rows.Scan(&id, &value)
+		turn = value
+	}
+	return turn
+}
+
+func selectPlayer() string {
+	var player string
+	fmt.Println("Select player x or o")
+	fmt.Scanln(&player)
+	return player
+}
+
+func setupdb(db *sql.DB) {
+	r1, err := db.Query("SELECT COUNT(*) FROM grid")
+	if err != nil {
+		fmt.Println(err)
+	}
+	var count int
+	for r1.Next() {
+		r1.Scan(&count)
+	}
+	if count == 0 {
+		for i := 1; i < 10; i++ {
+			_, err := db.Exec("INSERT INTO grid (value) VALUES ($1)", i)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+	r2, err := db.Query("SELECT COUNT(*) FROM turns")
+	if err != nil {
+		fmt.Println(err)
+	}
+	var count2 int
+	for r2.Next() {
+		r2.Scan(&count2)
+	}
+	if count2 == 0 {
+		_, err := db.Exec("INSERT INTO turns (value) VALUES ('x')")
 		if err != nil {
 			fmt.Println(err)
 		}
 	}
-	_, err := db.Exec("INSERT INTO turns (value) VALUES ('1')")
-	if err != nil {
-		fmt.Println(err)
-	}
+	fmt.Printf("added %v rows to grid and %v rows to turns", count, count2)
+
 }
 
-func startGame(db *sql.DB) { // Start the game
+func resetGrid(db *sql.DB) {
+	fmt.Println("Resetting grid")
 	for i := 1; i < 10; i++ {
 		_, err := db.Exec("UPDATE grid SET value = $1 WHERE id = $2", i, i)
 		if err != nil {
 			fmt.Println(err)
 		}
 	}
-	_, err := db.Exec("UPDATE turns SET value = 1 WHERE id = 1")
-	if err != nil {
-		fmt.Println(err)
-	}
+	fmt.Println("Grid reset")
+}
 
+func startGame(g game, db *sql.DB) bool {
+	setupdb(db)
+	resetGrid(db)
+	g.game = true
+	return g.game
 }
 
 func main() {
@@ -106,24 +183,20 @@ func main() {
 	if err != nil {                                                                                            // If there is an error
 		fmt.Println(err)
 	}
-	// setup(db)
-	startGame(db)
-	printGrid(db)
 
-	turn := 0
-	for true {
-		input := 0
-		var ox string
-		if turn%2 == 0 {
-			ox = "O"
-		} else {
-			ox = "X"
+	var g game
+	g.game = startGame(g, db)
+	g.player = selectPlayer()
+
+	for g.game == true {
+		turn := turnCheck(db) // Get the turn
+		if turn == g.player { // If it is the players turn
+			taketurn(g, db)                      // Take a turn
+			if winCheck(getGrid(db), g.player) { // If the player has won
+				g.game = false // End the game
+			}
 		}
-		fmt.Printf("Enter a number for %v :", ox)
-		fmt.Scanln(&input)
-		update(db, input, ox)
-		printGrid(db)
-		turn += 1
+
 	}
 
 }
